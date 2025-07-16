@@ -20,7 +20,7 @@ class ConvertApp(QMainWindow, Ui_MainWindow):
 
 	def confirm_quit(self):
 		reply = QMessageBox.question(self, "Quit", "Are you sure you want to exit?", QMessageBox.Yes | QMessageBox.No)
-		if reply ==QMessageBox.Yes:
+		if reply == QMessageBox.Yes:
 			self.close()
 
 	def update_labels(self):

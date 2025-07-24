@@ -94,10 +94,12 @@ class TaskView(QDialog):
 class MainWindow(QWidget):
 	def __init__(self):
 		super().__init__()
-		self.loadTasks()
-
 		self.setWindowTitle("To Do List --Main Window--")
 		self.resize(800, 600)
+
+		self.tasks = []
+		self.taskList = QListWidget()
+		self.loadTasks()
 
 		self.layout = QVBoxLayout()
 
@@ -109,8 +111,6 @@ class MainWindow(QWidget):
 		self.buttons.addWidget(self.exitButton)
 		self.layout.addLayout(self.buttons)
 
-		self.tasks = []
-		self.taskList = QListWidget()
 		self.layout.addWidget(self.taskList)
 
 		self.setLayout(self.layout)
@@ -138,7 +138,7 @@ class MainWindow(QWidget):
 	def viewTaskDetails(self, item):
 		index = self.taskList.row(item)
 		task = self.tasks[index]
-		heading, details = task["heading"], tasks["details"]
+		heading, details = task["heading"], task["details"]
 		view = TaskView(heading,details)
 		# view.exec()	# this line freezes the main thread untill window is closed
 		view.show() 	# lets the user interact with multiple windows at the same time.

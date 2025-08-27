@@ -1,10 +1,7 @@
 [
     {
-        "heading": "t11",
-        "details": "asd541a 20 a"
-    },
-    {
-        "heading": "12e1a2ds0 a.s as",
-        "details": "as34d\n a12s\n a\n0s 1da\ns 0das"
+        "heading": "Reminder for ChatGPT:",
+        "details": "- PyQt To-Do list app\n- Features done: add task, view, edit, delete, save/load to JSON\n- Used Note dialog and TaskView with buttons\n- Continue from TaskView to add more features like completion, due dates, search, etc.",
+        "dueDate": "2025-07-25"
     }
 ]

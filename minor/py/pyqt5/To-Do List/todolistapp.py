@@ -1,7 +1,9 @@
 import json
 import os
+from PyQt5.QtCore import QDate
 from PyQt5.QtWidgets import (
-QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QListWidgetItem, QDialog, QMessageBox, QLabel, QTextEdit
+	QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QListWidgetItem, QDialog, QMessageBox,
+	QLabel, QTextEdit, QDateEdit
 )
 
 TASKFILE = "tasks.json"
@@ -18,12 +20,18 @@ class Note(QDialog):
 		self.headLayout.addWidget(self.heading_label)
 		self.heading = QLineEdit()
 		self.headLayout.addWidget(self.heading)
-		self.layout.addLayout(self.headLayout)
 
+		self.dateEdit = QDateEdit()
+		self.dateEdit.setCalendarPopup(True)
+		self.dateEdit.setDate(QDate.currentDate())
+		self.headLayout.addWidget(QLabel("Due Date:"))
+		self.headLayout.addWidget(self.dateEdit)
+
+		self.layout.addLayout(self.headLayout)
 		self.layout.addStretch()
 
-		self.text_input = QTextEdit()
-		self.layout.addWidget(self.text_input, stretch=1)
+		self.textInput = QTextEdit()
+		self.layout.addWidget(self.textInput, stretch=1)
 
 		self.buttonLayout = QHBoxLayout()
 		self.saveButton = QPushButton("Save")
@@ -44,12 +52,13 @@ class Note(QDialog):
 
 	def saveTask(self):
 		heading = self.heading.text()
-		details = self.text_input.toPlainText()
+		details = self.textInput.toPlainText()
+		dueDate = self.dateEdit.date().toString("yyyy-MM-dd")
 		if not heading.strip():
 			QMessageBox.warning(self, "Warning", "Heading cannot be empty!")
 			return
 		self.saved = True
-		self.taskdata = (heading, details)
+		self.taskData = (heading, details, dueDate)
 		self.accept()	# close dialog with accept
 
 	def discardTask(self):
@@ -62,34 +71,84 @@ class Note(QDialog):
 			self.reject()	# close dialog with reject
 
 class TaskView(QDialog):
-	def __init__(self, heading, details):
+	def __init__(self, index, task, main_window):
 		super().__init__()
 
-		a = "..." if len(heading) > 10 else ""
-		self.setWindowTitle(f"Task Details -{heading[:10]}{a}-")
+		self.setWindowTitle(f"Task Details {task['heading'][:12]}{'...' if len(task['heading']) > 12 else ''}")
 		self.resize(400, 300)
+
+		self.index = index
+		self.task = task
+		self.main_window = main_window
+
 		layout = QVBoxLayout()
 
+		# Heading Display
 		headLayout = QHBoxLayout()
-		headLayout.addWidget(QLabel("Heading:"))
-		headLayout.addWidget(QLabel(f" {heading}"))
+		headLayout.addWidget(QLabel("Heading:").setStyleSheet("font-weight: bold"))
+		headLayout.addWidget(QLabel(f"{task['heading']}"))
+		self.dateEdit = QLabel(f"Due Date: {task.get('dueDate', 'not-set')}")
+		headLayout.addWidget(self.dateEdit)
 		layout.addLayout(headLayout)
 
 		layout.addStretch()
 
-		details_text = QTextEdit()
-		details_text.setPlainText(details)
-		details_text.setReadOnly(True)
+		# Task Details
+		self.detailsText = QTextEdit()
+		self.detailsText.setPlainText(task["details"])
+		self.detailsText.setReadOnly(True)
+		layout.addWidget(self.detailsText, stretch=1)
 
-		layout.addWidget(details_text, stretch=1)
-
+		# buttons: edit delete back
 		buttonLayout = QHBoxLayout()
-		backbutton = QPushButton("Back")
-		layout.addWidget(backbutton)
+		self.editbutton = QPushButton("Edit")
+		self.deletebutton = QPushButton("Delete")
+		self.backbutton = QPushButton("Back")
 
+		buttonLayout.addWidget(self.editbutton)
+		buttonLayout.addWidget(self.deletebutton)
+		buttonLayout.addWidget(self.backbutton)
+
+		layout.addLayout(buttonLayout)
 		self.setLayout(layout)
 
-		backbutton.clicked.connect(self.close)
+		# connections
+		self.editbutton.clicked.connect(self.editTask)
+		self.deletebutton.clicked.connect(self.deleteTask)
+		self.backbutton.clicked.connect(self.close)
+
+	def deleteTask(self):
+		confirm = QMessageBox.question(
+			self, "Delete Task?", "Are you sure you want to delete this task?",
+			QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+		)
+		if confirm == QMessageBox.StandardButton.Yes:
+			del self.main_window.tasks[self.index]
+			self.main_window.taskList.takeItem(self.index)
+			self.main_window.saveTasks()
+			self.close()
+
+	def editTask(self):
+		# open Note with existing data
+		editDialog = Note(self)
+		editDialog.heading.setText(self.task['heading'])
+		editDialog.textInput.setText(self.task['details'])
+
+		if editDialog.exec():
+			if editDialog.saved:
+				heading, details, dueDate = editDialog.taskData
+				# update task
+				self.task['heading'] = heading
+				self.task['details'] = details
+				self.task['dueDate'] = dueDate
+				self.main_window.tasks[self.index] = self.task
+				self.main_window.taskList.item(self.index).setText(heading)
+				self.main_window.saveTasks()
+				# update this window
+				self.detailsText.setPlainText(details)
+				self.dateEdit.setText(dueDate)
+				self.setWindowTitle(f"Task Details {self.task['heading'][:12]}{'...' if len(self.task['heading']) > 12 else ''}")
+
 
 class MainWindow(QWidget):
 	def __init__(self):
@@ -111,6 +170,11 @@ class MainWindow(QWidget):
 		self.buttons.addWidget(self.exitButton)
 		self.layout.addLayout(self.buttons)
 
+		self.searchBox = QLineEdit()
+		self.searchBox.setPlaceholderText("Search Tasks...")
+		self.searchBox.textChanged.connect(self.filterTasks)
+		self.layout.insertWidget(1, self.searchBox)
+
 		self.layout.addWidget(self.taskList)
 
 		self.setLayout(self.layout)
@@ -124,13 +188,21 @@ class MainWindow(QWidget):
 		# Adding a list to store open TaskView instances:
 		self.openViews = []
 
+	def filterTasks(self, text):
+		self.taskList.clear()
+		for task in self.tasks:
+			heading = task["heading"]
+			if text.lower() in heading.lower():
+				itemText = heading
+				self.taskList.addItem(itemText)
+
 	def openNote(self):
 		note = Note(self)
 		if note.exec():
 			# if user clicked save
 			if note.saved:
-				heading, details = note.taskdata
-				self.tasks.append({"heading":heading, "details":details})
+				heading, details, dueDate = note.taskData
+				self.tasks.append({"heading":heading, "details":details, "dueDate":dueDate, "Completed":False})
 				self.taskList.addItem(heading)
 				self.saveTasks()
 				print(f"saved task:: {heading} - {details}...")
@@ -138,8 +210,7 @@ class MainWindow(QWidget):
 	def viewTaskDetails(self, item):
 		index = self.taskList.row(item)
 		task = self.tasks[index]
-		heading, details = task["heading"], task["details"]
-		view = TaskView(heading,details)
+		view = TaskView(index, task, self)
 		# view.exec()	# this line freezes the main thread untill window is closed
 		view.show() 	# lets the user interact with multiple windows at the same time.
 		self.openViews.append(view)
@@ -150,6 +221,8 @@ class MainWindow(QWidget):
 			QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
 		)
 		if reply == QMessageBox.StandardButton.Yes:
+			# Option 1 — clean quit ===>>QApplication.quit()
+			# Option 2 — let close event propagate
 			self.close()
 
 	def saveTasks(self):
